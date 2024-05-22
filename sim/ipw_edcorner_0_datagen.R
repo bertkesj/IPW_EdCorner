@@ -26,8 +26,8 @@ full_cohort = cohort_gen(n=10000,            # number of participants
                          year_eof=2030, 
                          rateset=rateset
                          )
-write_csv(full_cohort,
-          'sim/cohort.csv')
+# write_csv(full_cohort,
+#           'sim/cohort.csv')
 
 # basic data dictionary:
 # 'data.frame':	5243 obs. of  18 variables:          Each record comprises 1 person-year
