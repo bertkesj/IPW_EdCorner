@@ -92,7 +92,7 @@ worker_genx <- function(worker, limit=Inf){
         worker$rate_allcause[i] = plogis(logit(worker$rate_allcause[i]) + 0.01*worker$cumx[i] + U + -iswaged)
         worker$d2[i] = rbinom(1, 1,  worker$rate_allcause[i])
       }
-      if(worker$d2[i]==1 || worker$d2[i]==1) alive = 0
+      if(worker$d1[i]==1 || worker$d2[i]==1) alive = 0
   }
   worker[1:i,]
 }
