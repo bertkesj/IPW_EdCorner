@@ -25,6 +25,10 @@ fc_del <- full_cohort %>%
   filter(d2c == 0 |
            (d2c == 1 & row_number() == 1)) 
 
+# Save csv for package
+#sim_cohort = fc_del
+#save(sim_cohort, file="data/sim_cohort.RData")
+
 ###Function to create cohort copy
 cohort <- function(limit){
   ################################################################################
