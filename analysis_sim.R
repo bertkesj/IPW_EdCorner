@@ -1,4 +1,4 @@
-library(tidyverse)
+library(dplyr) # TODO: change to specific tidyverse packages (dplyr?)
 library(lubridate)
 library(LTASR)
 library(rms)
@@ -6,7 +6,7 @@ library(rms)
 ##function
 invlogit <- function(x) {
   mx <- pmin(500, x)
-  exp(mx) / (1 + exp(mx)) %>%
+    1/(1 + exp(-mx)) %>%
     return()
 } 
 
