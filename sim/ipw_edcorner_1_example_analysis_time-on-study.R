@@ -71,21 +71,43 @@ agekn = attr(rcspline.eval(filter(cens_data, fu_weight==1)$age, nk = 4), "knots"
 yearkn = attr(rcspline.eval(filter(cens_data, fu_weight==1)$year, nk = 4), "knots")
 
 
-confdmod <- glm(cens ~ rcspline.eval(age, knots=agekn0) + rcspline.eval(year, knots=yearkn0) + wagestatus + gender + race, data = cens_data, weight=conf_weight, family=binomial())
-confnmod <- glm(cens ~ 1, data = cens_data, weight=conf_weight, family=binomial())
+# fit models if there is more than a small amount of censoring (seems to work either way, but this avoids convergence problems)
+if(sum(cens_data[cens_data$conf_weight==1,"cens"]) > 10){
+  confdmod <- glm(cens ~ rcspline.eval(age, knots=agekn0) + rcspline.eval(year, knots=yearkn0) + wagestatus + gender + race, data = cens_data, weight=conf_weight, family=binomial())
+  confnmod <- glm(cens ~ 1, data = cens_data, weight=conf_weight, family=binomial())
+  cens_data = cens_data %>% 
+    mutate(
+      dconf = as.numeric(predict(confdmod, type="response")),
+      nconf = as.numeric(predict(confnmod, type="response")),
+    )
+} else{
+  cens_data = cens_data %>% 
+    mutate(
+      dconf = 0,
+      nconf = 0,
+    )
+}
 
-censdmod <- glm(cens ~ rcspline.eval(age, knots=agekn) + rcspline.eval(year, knots=yearkn) + wagestatus + gender + race + cxl, data = cens_data, weight=fu_weight, family=binomial())
-censnmod <- glm(cens ~ 1, data = cens_data, weight=fu_weight, family=binomial())
+if(sum(cens_data[cens_data$fu_weight==1,"cens"]) > 10){
+  censdmod <- glm(cens ~ rcspline.eval(age, knots=agekn) + rcspline.eval(year, knots=yearkn) + wagestatus + gender + race + cxl, data = cens_data, weight=fu_weight, family=binomial())
+  censnmod <- glm(cens ~ 1, data = cens_data, weight=fu_weight, family=binomial())
+  cens_data = cens_data %>% 
+    mutate(
+      dcens = as.numeric(predict(censdmod, type="response")),
+      ncens = as.numeric(predict(censnmod, type="response"))
+    )
+} else{
+  cens_data = cens_data %>% 
+    mutate(
+      dcens = 0,
+      ncens = 0,
+    )
+}
+
 
 
 
 cens_data = cens_data %>% 
-  mutate(
-    dconf = as.numeric(predict(confdmod, type="response")),
-    nconf = as.numeric(predict(confnmod, type="response")),
-    dcens = as.numeric(predict(censdmod, type="response")),
-    ncens = as.numeric(predict(censnmod, type="response"))
-  ) %>% 
   mutate(
     wtcontr = case_when(
       ((fobs____ == 1) & (atwork==1)) ~ (1-nconf)/(1-dconf),

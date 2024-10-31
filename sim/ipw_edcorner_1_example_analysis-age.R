@@ -22,9 +22,9 @@ quantile(filter(sim_cohort, atwork==1)$x, 0:20/20)
 
 #1) set limit (example uses limit > max exposure, which should return a "natural course" estimate)
 
-limit = 69
+limit = 70
 
-#2) artificially censor data
+#2) artificially censor data (keeping first observation that is censored)
 
 cens_data <- sim_cohort %>%
   group_by(id) %>%
@@ -70,22 +70,42 @@ yearkn0 = attr(rcspline.eval(filter(cens_data, conf_weight==1)$year, nk = 4), "k
 agekn = attr(rcspline.eval(filter(cens_data, fu_weight==1)$age, nk = 4), "knots")
 yearkn = attr(rcspline.eval(filter(cens_data, fu_weight==1)$year, nk = 4), "knots")
 
+# fit models if there is more than a small amount of censoring (seems to work either way, but this avoids convergence problems)
+if(sum(cens_data[cens_data$conf_weight==1,"cens"]) > 10){
+  confdmod <- glm(cens ~ rcspline.eval(age, knots=agekn0) + rcspline.eval(year, knots=yearkn0) + wagestatus + gender + race, data = cens_data, weight=conf_weight, family=binomial())
+  confnmod <- glm(cens ~ 1, data = cens_data, weight=conf_weight, family=binomial())
+  cens_data = cens_data %>% 
+    mutate(
+      dconf = as.numeric(predict(confdmod, type="response")),
+      nconf = as.numeric(predict(confnmod, type="response")),
+    )
+} else{
+  cens_data = cens_data %>% 
+    mutate(
+      dconf = 0,
+      nconf = 0,
+    )
+}
 
-confdmod <- glm(cens ~ rcspline.eval(age, knots=agekn0) + rcspline.eval(year, knots=yearkn0) + wagestatus + gender + race, data = cens_data, weight=conf_weight, family=binomial())
-confnmod <- glm(cens ~ 1, data = cens_data, weight=conf_weight, family=binomial())
-
-censdmod <- glm(cens ~ rcspline.eval(age, knots=agekn) + rcspline.eval(year, knots=yearkn) + wagestatus + gender + race + cxl, data = cens_data, weight=fu_weight, family=binomial())
-censnmod <- glm(cens ~ 1, data = cens_data, weight=fu_weight, family=binomial())
+if(sum(cens_data[cens_data$fu_weight==1,"cens"]) > 10){
+  censdmod <- glm(cens ~ rcspline.eval(age, knots=agekn) + rcspline.eval(year, knots=yearkn) + wagestatus + gender + race + cxl, data = cens_data, weight=fu_weight, family=binomial())
+  censnmod <- glm(cens ~ 1, data = cens_data, weight=fu_weight, family=binomial())
+  cens_data = cens_data %>% 
+    mutate(
+      dcens = as.numeric(predict(censdmod, type="response")),
+      ncens = as.numeric(predict(censnmod, type="response"))
+    )
+} else{
+  cens_data = cens_data %>% 
+    mutate(
+      dcens = 0,
+      ncens = 0,
+    )
+}
 
 
 
 cens_data = cens_data %>% 
-  mutate(
-    dconf = as.numeric(predict(confdmod, type="response")),
-    nconf = as.numeric(predict(confnmod, type="response")),
-    dcens = as.numeric(predict(censdmod, type="response")),
-    ncens = as.numeric(predict(censnmod, type="response"))
-  ) %>% 
   mutate(
     wtcontr = case_when(
       ((fobs____ == 1) & (atwork==1)) ~ (1-nconf)/(1-dconf),
@@ -102,16 +122,17 @@ cens_data = cens_data %>%
 mean(filter(cens_data, cens==0)$ipw)
 sum(filter(cens_data, cens==0)$d1)
 sum(filter(cens_data, cens==0)$d2)
-
+length(unique(cens_data$id))
 #
 cens_data$event <- factor(cens_data$d2 + cens_data$d1*2, 0:2, labels=c("censor", "d_other", "d_lc"))
 
 #tt = survfit(Surv(ageout_new, d)~1, data=dat)
 #tail(cbind(tt$time, tt$surv))
 #sum(dat$ageout_new >= tt$time[62])
-
+# fit multistate model for competing events
 tt = survfit(Surv(agein, age, event)~1, data=cens_data, id=id, weight=ipw)
 
+# calculate risk based on the estimated cumulative hazard
 riskdf = data.frame(age = tt$time, cumhaz = as.matrix(tt$cumhaz)) %>%
   mutate(
     lim = limit,
@@ -127,3 +148,7 @@ tail(riskdf)
 # note the calculated risk will not equal the observed risk due to late entry
 sum(sim_cohort$d1)/length(unique(sim_cohort$id))
 sum(sim_cohort$d2)/length(unique(sim_cohort$id))
+
+
+# now limited to  age 90
+tail(filter(riskdf, age<=90))
