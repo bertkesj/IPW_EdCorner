@@ -1,0 +1,42 @@
+Package: ipcw.limits
+Title: Inverse Probability of Censoring Weights for Occupational Exposure Limits
+Version: 0.0.0.9000
+Authors@R: 
+    c(
+    person("Alexander", "Keil", , "alex.keil@nih.gov", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0002-0955-6107"))
+    person("Stephen", "Bertke", , "inh4@cdc.gov", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0002-3047-3816"))
+           )
+Description: Using the clone-censor-weight method, this package is used to study impacts of occupational exposures.
+License: GPL (>= 2)
+Depends: 
+    R (>= 3.5.0)
+Imports: 
+    arm,
+    future,
+    future.apply,
+    generics,
+    ggplot2 (>= 3.3.0),
+    grDevices,
+    grid,
+    gridExtra,
+    nnet,
+    numDeriv,
+    pscl,
+    rootSolve,
+    stats,
+    survival,
+    tibble
+Suggests: 
+    broom,
+    devtools,
+    knitr,
+    markdown,
+    MASS,
+    mice
+VignetteBuilder: 
+    knitr
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.1

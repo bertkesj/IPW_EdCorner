@@ -1,4 +1,4 @@
-library(tidyverse)
+library(dplyr)
 
 source("sim/ipw_edcorner_0_datagen_fns.R")
 # data generation
