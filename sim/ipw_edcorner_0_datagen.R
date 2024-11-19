@@ -1,5 +1,3 @@
-library(dplyr)
-
 source("sim/ipw_edcorner_0_datagen_fns.R")
 # data generation
 data(us_119ucod_19602021, package="LTASR")
@@ -15,9 +13,10 @@ word2number <- function(word){
 set.seed(word2number("bertke keil kelly-reif"))
 
 # the data
-full_cohort = cohort_gen(n=10000,            # number of participants
-                         exposure_limit=Inf, # set the annual exposure limit in the observed data (can be Inf, too) - useful for establishing true risk estimates if needed
-                         cause=16,         # Cause of death of interest (following LTAS numbering of minor causes)
+sim_cohort = cohort_gen(n=10000,            # number of participants
+                         exposure_limit=10, # set the annual exposure limit in the observed data (can be Inf, too) - useful for establishing true risk estimates if needed
+                                            # preferably set to a large finite value, rather than Inf (generally there will be some operational limits)
+                         cause=16,          # Cause of death of interest (following LTAS numbering of minor causes)
                          # these should make sense
                          age_firsthire = 16, 
                          age_lasthire = 40, 
@@ -26,8 +25,9 @@ full_cohort = cohort_gen(n=10000,            # number of participants
                          year_eof=2030, 
                          rateset=rateset
                          )
-# write_csv(full_cohort,
-#           'sim/cohort.csv')
+
+# save(sim_cohort, file="data/sim_cohort.RData")
+# save(sim_cohort, file="ipcw.limits/data/sim_cohort.RData")
 
 # basic data dictionary:
 # 'data.frame':	5243 obs. of  18 variables:          Each record comprises 1 person-year
