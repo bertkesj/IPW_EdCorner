@@ -4,3 +4,4 @@
 .Ruserdata
 sim/cohort.csv
 .DS_Store
+*.history
