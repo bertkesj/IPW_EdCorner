@@ -30,7 +30,7 @@ fc_del <- full_cohort %>%
 #save(sim_cohort, file="data/sim_cohort.RData")
 
 ###Function to create cohort copy
-cohort <- function(limit){
+cohort <- function(limit, fc_del){
   ################################################################################
   # Censored
   per_his <- fc_del %>%
@@ -47,7 +47,7 @@ cohort <- function(limit){
     filter(censored == 0 |
              (censored == 1 & (lag(censored) == 0 |
                                  row_number() == 1))) %>%
-    mutate(cumx_prev = cumx - 1)
+    mutate(cumx_prev = lag(cumx, 1, 0))
   
   emp_c$Pc <- glm((censored==1) ~ rcs(age,4) + rcs(year,4) + 
                     factor(race) + factor(gender) +
@@ -95,8 +95,10 @@ dat <- map(c(5:10 / 10, 2:10, 1000),
   select(id, age_beg, age_end, d1, IPW, IPWunadj, cohort)
 cox <- coxph(Surv(age_beg, age_end, d1) ~ factor(cohort,
                                                  c(1000, 5:10 / 10, 2:10)), 
+             #id = paste(id, cohort),
              weight=IPW, 
-             data=dat)
+             data=dat,
+             ties='breslow')
 summary(cox)$coefficients %>%
   as_tibble(rownames = 'var') %>%
   mutate(var = str_remove(var, 
