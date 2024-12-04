@@ -1,3 +1,9 @@
+# considerations for this simulation:
+# 1) the censored population must be weight-able to look like the original population
+#   a) if a "low exposure" regime just selects for workers who don't work for very 
+#      long, then you will have a weighted population that is missing longer tenured 
+#      workers (the healthiest) 
+
 
 cohort_gen <- function(n=100, exposure_limit=1, age_firsthire = 16, age_lasthire = 40, year_firsthire = 1950, year_lasthire = 1980, year_eof=2030, rateset=NULL,cause=16){
   if(is.null(rateset)) stop("Please specify rateset")
@@ -8,13 +14,15 @@ cohort_gen <- function(n=100, exposure_limit=1, age_firsthire = 16, age_lasthire
   dat = within(dat, {
     age_hire = round(runif(n, age_firsthire, age_lasthire))
     year_hire = round(runif(n, year_firsthire, year_lasthire))
-    termrate = runif(n, .01, .1)  # randomly chosen baseline exponential termination rate (will account for time varying factors below)
+    #termrate = runif(n, 0.06, 0.08)  # randomly chosen baseline exponential termination rate
+    termrate = 0.02  # fixed baseline exponential termination rate
     year_eof = rep(year_eof, n)
     wage = rbinom(n, 1, 0.7) # wage or salary worker 1 = wage, 0 = salary
     gender = sample(c("M", "F"), n, replace=TRUE)
     race = sample(c("N", "W", "W", "W"), n, replace=TRUE)
     #baseline_frailty = runif(n, 0.1, 0.9)
     baseline_frailty = runif(n, -1.0, 1.0)
+    workarea = sample(0:4, size=n, replace=TRUE, prob=c(0.3, .3, .25, .1, .05))
   })
   
   # full worker data up to the point of end of follow up, excluding employment, exposure, mortality data
@@ -36,21 +44,30 @@ cohort_gen <- function(n=100, exposure_limit=1, age_firsthire = 16, age_lasthire
   workers_alive[,keepnames,drop=FALSE]
 }
 
+distfun <- function(parm1,parm2){
+  x = -1
+  while(x < 0){
+    #x = rt(1,parm2, parm1)     # df, "ncp" 
+    x = rlnorm(1,parm1,parm2)     # mean, sd of underlying normal dist
+  }
+   x
+}
 
 sim_exposure <- function(mn,sd,limit, maxit=30){
   # mn = 1.0
   # sd = 1.0
   #limit = 1.0
   if(limit==0) return(0)
-  (x = rnorm(1, mn, sd))
+  x = limit
   it = 0
-  while(x > log(limit) && it <= maxit){
-    x = rnorm(1, mn, sd)
-    if(x > log(limit) && it == maxit){
-      x = log(limit)
+  while(x >= limit && it <= maxit){
+    x = distfun(mn, sd)
+    if(x >= limit && it == maxit){
+      x = limit-.Machine$double.eps
+      break
     }
   }
-  exp(x)
+  x
 }
 
 logit <- function(x){
@@ -64,6 +81,7 @@ worker_genx <- function(worker, limit=Inf){
   # worker$rate_allcause = worker$rate[1]
   nobs = nrow(worker)
   iswaged = worker$wagestatus[1]
+  workarea = worker$workarea[1]
   U = worker$baseline_frailty[1]
   worker$atwork = c(1,rep(0,nobs-1))
   worker$d1 = 0
@@ -79,30 +97,40 @@ worker_genx <- function(worker, limit=Inf){
     i = i+1
     # employment
     if(leftwork == 0 && i > 1) {
-      worker$rate_term[i] = plogis(logit(worker$rate_term[i]) + 0.01*worker$cumx[i-1] + 0.1*(worker$age[i]-50)/10 + 2*U+ escalate(worker$age[i], 65, 0.5)) 
+      worker$rate_term[i] = plogis(logit(worker$rate_term[i]) + 0.02*worker$cumx[i-1] + 2*U + escalate(worker$age[i], 60, 0.5)) 
+      #worker$rate_term[i] = plogis(logit(worker$rate_term[i]) + U) 
       worker$atwork[i] = rbinom(1, 1,  1-worker$rate_term[i])
       leftwork = 1 - worker$atwork[i]
     }
     # exposure
     if(leftwork == 0){
-      # testx = runif(10000)*10
-      # mu = 0; sd = 0.6
+      # testx = seq(0, 20, length.out=100000); mu = -0.0; sd = 0.5
       # sum(sapply(testx, function(x) x*dlnorm(x,mu,sd)))/sum(sapply(testx, function(x) dlnorm(x,mu,sd)))
-      mn = 0.0 + 0.1*(xl-1.2) + 0.3*(iswaged-0.7)  + 0.3*((worker$gender[i]=="M")-0.5) + 0.02*(worker$year[i]-1980)/10
-      sd = 0.6;
-      worker$x[i] = sim_exposure(mn, sd, limit)  
+      #mn = 0.0 #+ 0.03*(xl-1.13) + 0.05*(iswaged-0.7)  + 0.05*((worker$gender[i]=="M")-0.5) #- 0.01*(worker$year[i]-1980)/10
+      mn = switch(as.character(round(workarea)), "0"=-0.5, "1"=-0.25, "2"=-0.1, "3"=-0.05, "4"=0.0)
+      #mn = 0.5 + 0.1*xl + 0.2*(iswaged)  + 0.5*(worker$gender[i]=="M") #- 0.01*max(-5,(worker$year[i]-1980)/10)
+      #mn = 0.0 
+      sd = 0.4;
+      #df = 3;
+      # mean(exp(rnorm(100000, 0, 0.7)))
+      #worker$x[i] = sim_exposure(mn, sd, limit) + 0.1*xl + 0.2*(iswaged)  + 0.5*(worker$gender[i]=="M") 
+      if(workarea>0){
+        worker$x[i] = sim_exposure(mn, sd, limit) + 0.2*(iswaged)  + 0.5*(worker$gender[i]=="M") 
+      }else{
+        worker$x[i] = 0
+      }
+      
+      #worker$x[i] = sim_exposure(mn, df, limit)
       cumx = cumx + worker$x[i]
     }
     worker$cumx[i] = cumx;
-    # mortality
+    ### mortality ###
     # cause of interest
-    worker$rate[i] =              plogis(logit(worker$rate[i])           + 0.02*(worker$cumx[i]-12) + U + 2*(iswaged-0.7) + escalate(worker$age[i], 95, 0.5))
-    #worker$rate[i] = plogis(logit(worker$rate[i]) + 0.01*worker$cumx[i] + U + -iswaged)
+    worker$rate[i] =              plogis(logit(worker$rate[i])        + 0.04*(worker$cumx[i]-12) + U + 1*(iswaged-0.7) + escalate(worker$age[i], 95, 0.5))
     worker$d1[i] = rbinom(1, 1,  worker$rate[i])
     # all other causes
     if(worker$d1[i] == 0){
-      worker$rate_allcause[i] = plogis(logit(worker$rate_allcause[i]) + 0.01*(worker$cumx[i]-12) + U + 2*(iswaged-0.7) + escalate(worker$age[i], 95, 0.5))
-      #worker$rate_allcause[i] = plogis(logit(worker$rate_allcause[i]) + 0.01*worker$cumx[i] + U + -iswaged)
+      worker$rate_allcause[i] = plogis(logit(worker$rate_allcause[i]) + 0.0075*(worker$cumx[i]-12) + U + 1*(iswaged-0.7) + escalate(worker$age[i], 95, 0.5))
       worker$d2[i] = rbinom(1, 1,  worker$rate_allcause[i])
     }
     if(worker$d1[i]==1 || worker$d2[i]==1) alive = 0
@@ -113,18 +141,23 @@ worker_genx <- function(worker, limit=Inf){
 
 
 worker_gen0row <- function(row, minorrateset){
-  worker_gen0(row$id, row$age_hire, row$age_term, row$year_hire, row$year_eof, row$wage, row$gender, row$race, row$baseline_frailty, minorrateset)
+  worker_gen0(row$id, row$age_hire, row$age_term, row$year_hire, row$year_eof, row$wage, row$gender, row$race, row$baseline_frailty, row$workarea, minorrateset)
 }
 
 #' worker_gen0
 #' @description Generating longitudinal worker data under no exposure
 #' 
+#' @param id 
 #' @param age_hire 
-#'
 #' @param age_term 
 #' @param year_hire 
 #' @param year_eof 
 #' @param wage 
+#' @param gender 
+#' @param race 
+#' @param baseline_frailty 
+#' @param workarea 
+#' @param minorrateset 
 #'
 #' @examples 
 #' age_hire = 25
@@ -135,7 +168,7 @@ worker_gen0row <- function(row, minorrateset){
 #' id = 10
 #' gender = "M"
 #' race = "W"
-worker_gen0 <- function(id, age_hire, age_term, year_hire, year_eof, wage, gender, race, baseline_frailty, minorrateset){
+worker_gen0 <- function(id, age_hire, age_term, year_hire, year_eof, wage, gender, race, baseline_frailty, workarea, minorrateset){
   ageendpts = c("[15,20)","[20,25)","[25,30)","[30,35)","[35,40)","[40,45)",
                 "[45,50)","[50,55)","[55,60)","[60,65)","[65,70)","[70,75)",
                 "[75,80)","[80,85)","[85, Inf)")
@@ -162,6 +195,7 @@ worker_gen0 <- function(id, age_hire, age_term, year_hire, year_eof, wage, gende
   #
   worker$id = (id = rep(id, length(year)))
   worker$wagestatus = rep(wage, length(year))
+  worker$workarea = rep(workarea, length(year))
   #worker$atwork = as.numeric(age <= age_term) 
   worker$baseline_frailty = rep(baseline_frailty, length(year)) 
   worker 

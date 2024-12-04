@@ -14,18 +14,20 @@ set.seed(word2number("bertke keil kelly-reif"))
 
 # the data
 sim_cohort = cohort_gen(n=10000,            # number of participants
-                         exposure_limit=10, # set the annual exposure limit in the observed data (can be Inf, too) - useful for establishing true risk estimates if needed
+                         exposure_limit=50, # set the annual exposure limit in the observed data (can be Inf, too) - useful for establishing true risk estimates if needed
                                             # preferably set to a large finite value, rather than Inf (generally there will be some operational limits)
                          cause=16,          # Cause of death of interest (following LTAS numbering of minor causes)
                          # these should make sense
-                         age_firsthire = 16, 
-                         age_lasthire = 40, 
+                         age_firsthire = 18, 
+                         age_lasthire = 30, 
                          year_firsthire = 1950, 
-                         year_lasthire = 1980, 
-                         year_eof=2030, 
+                         year_lasthire = 1960, 
+                         #year_eof=2030, 
+                         year_eof=2010, 
                          rateset=rateset
                          )
 
+# TODO: delete these commented lines before release
 # save(sim_cohort, file="data/sim_cohort.RData")
 # save(sim_cohort, file="ipcw.limits/data/sim_cohort.RData")
 
