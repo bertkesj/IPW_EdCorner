@@ -209,7 +209,7 @@ ccncindex = which(cc_nc$time %in% commontimes)
 ccindex = which(ccr$time %in% commontimes)
 
 # risk difference, natural course vs. limit of 0.1
-(rddf = data.frame(
+rddf = data.frame(
   age=ccr$time[ccncindex], 
   risklc_nc=cc_nc$pstate[,,3][ccindex], 
   risklc_int = ccr$pstate[,,3][ccindex]

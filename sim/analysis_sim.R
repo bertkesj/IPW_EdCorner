@@ -1,4 +1,5 @@
-library(dplyr) # TODO: change to specific tidyverse packages (dplyr?)
+library(tidyverse)# TODO: change to specific tidyverse packages (dplyr?)
+library(dplyr) 
 library(lubridate)
 library(LTASR)
 library(rms)
@@ -14,7 +15,7 @@ invlogit <- function(x) {
 source('sim/ipw_edcorner_0_datagen.R')
 
 #Delete person time after first death (d1c, d2c)
-fc_del <- full_cohort %>%
+fc_del <- sim_cohort %>%
   group_by(id) %>%
   mutate(d1c = cumsum(d1),
          d2c = cumsum(d2)) %>%
@@ -26,8 +27,8 @@ fc_del <- full_cohort %>%
            (d2c == 1 & row_number() == 1)) 
 
 # Save csv for package
-#sim_cohort <- fc_del %>% group_by()
-#save(sim_cohort, file="data/sim_cohort.RData")
+# sim_cohort <- fc_del %>% group_by()
+# save(sim_cohort, file="data/sim_cohort.RData")
 
 ###Function to create cohort copy
 cohort <- function(limit, fc_del){
@@ -51,7 +52,9 @@ cohort <- function(limit, fc_del){
   
   emp_c$Pc <- glm((censored==1) ~ rcs(age,4) + rcs(year,4) + 
                     factor(race) + factor(gender) +
-                    factor(wagestatus) + rcs(cumx_prev,4) , 
+                    factor(wagestatus) + 
+                    #rcs(cumx_prev,4) , 
+                    cumx_prev , 
                   data=emp_c,
                   family=binomial(link='logit')) %>%
     predict(newdata=emp_c) %>%
@@ -88,7 +91,7 @@ cohort <- function(limit, fc_del){
 
 library(survival)
 dat <- map(c(5:10 / 10, 2:10, 1000),
-           cohort) %>%
+           ~cohort(., fc_del)) %>%
   reduce(bind_rows)  %>%
   mutate(age_beg = age,
          age_end = age + .99) %>%
