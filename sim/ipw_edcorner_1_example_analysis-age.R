@@ -167,9 +167,9 @@ cens_data <- cens_data %>%
 cens_data$event <- factor(cens_data$d2 + cens_data$d1*2, 0:2, labels=c("censor", "d_other", "d_lc"))
 tt = survfit(Surv(agein, age, event)~1, data=cens_data, id=cloneid, weight=ipw)
 
-riskdf = data.frame(tt$time, tt$pstate)
-names(riskdf) = c("age", "surv", "risk_other", "risk_lc")
-tail(riskdf)
+riskdf1 = data.frame(tt$time, tt$pstate)
+names(riskdf1) = c("age", "surv", "risk_other", "risk_lc")
+tail(riskdf1)
 
 #  6a) Use Aalen-Johansen estimator to get risk for each outcome at the "natural course"
 # note that this could require IPCW for censoring due to loss to follow-up, but these data do not have that issue
@@ -198,9 +198,9 @@ coxph(Surv(agein, age, d1)~exposed,
 # 7b) Risk difference at a few illustrative ages from weighted Aalen-Johansen estimator
 # Note: this will be negative if the exposure is harmful
 # risk difference at age 80 
-riskdf[riskdf$age==80, "risk_lc"] - riskdf0[riskdf0$age==80, "risk_lc0"]
+riskdf1[riskdf1$age==80, "risk_lc"] - riskdf0[riskdf0$age==80, "risk_lc0"]
 # risk difference at age 90
-riskdf[riskdf$age==90, "risk_lc"] - riskdf0[riskdf0$age==90, "risk_lc0"]
+riskdf1[riskdf1$age==90, "risk_lc"] - riskdf0[riskdf0$age==90, "risk_lc0"]
 
 
 ######### BOOTSTRAPPING #########
