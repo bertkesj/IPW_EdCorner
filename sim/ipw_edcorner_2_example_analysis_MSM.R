@@ -18,10 +18,17 @@ sim_cohort <- sim_cohort %>%
     cumatworkl = lag(cumatwork, default=0),
     atworkl = lag(atwork, default=0),  
     leftwork = as.numeric(atworkl==1 & atwork == 0),
-    male = as.numeric(gender == "M")
+    cxl2 = lag(cxl, default=0),  
   ) %>%
   select(-one) %>%
-  group_by()
+  ungroup()
+sim_cohort <- sim_cohort %>%
+  group_by(id) %>%
+  mutate(
+    male = as.numeric(gender == 'M')
+  ) %>%
+  ungroup()
+
 
 #1) set grid of limits based on regular values of empirical distribution
 # the lowest limit must include some uncensored deaths
@@ -30,7 +37,8 @@ sim_cohort <- sim_cohort %>%
 #  so here we find a regular grid of values for the maximum annual exposure
 maxexposures = as.numeric(tapply(sim_cohort$x, sim_cohort$id, max))
 
-
+# Finding 30 potential occupational limits for a marginal structural model
+# strategy: pick limits that are well within the bounds of the data
 (limits = quantile(maxexposures[maxexposures>0], seq(.20,0.95,length.out=30))) # 30 limits all within the range of observed lifetime max exposures
 # want to have at least 20% remain uncensored,
 
@@ -40,7 +48,6 @@ deaths = data.frame(
   numd1 = as.numeric(tapply(sim_cohort$d1, sim_cohort$id, max)),
   numd2 = as.numeric(tapply(sim_cohort$d2, sim_cohort$id, max))
 )
-
 tot_events = do.call(rbind, lapply(limits, function(x){
   data.frame(
     obs=sum(deaths$maxexposures < x), 
@@ -52,7 +59,7 @@ tot_events = do.call(rbind, lapply(limits, function(x){
   )
 }))
 
-
+tot_events
 
 # feasible limits
 limits = filter(tot_events, tot_d1 > 10 & tot_d2 > 10)$limit
@@ -80,11 +87,7 @@ doipw = function(sim_cohort, limits){
     filter(
       drop < 2
     )
-  quantile(sim_cohort$cumatwork, c(0.95, 0.99))
-  quantile(filter(cens_data, cens==0)$cumatwork, c(0.95, 0.99))
-  quantile(sim_cohort$age, c(0.95, 0.99))
-  quantile(filter(cens_data, cens==0)$age, c(0.95, 0.99))
-  
+
   # 3) create 1/0 weights to use for confounding/censoring during follow-up (alternative is to create new datasets)
   cens_data <- group_by(cens_data, cloneid) %>%
     mutate(
@@ -100,7 +103,7 @@ doipw = function(sim_cohort, limits){
       intervened = 0,
     ) %>%
     select(-c(one, nobs)) %>%
-    group_by()
+    ungroup()
   # check: which(tapply(sim_cohort$x, sim_cohort$id, max) < limit & tapply(sim_cohort$atwork, sim_cohort$id, sum)>3)[2] # index 427
   # check: names(tapply(sim_cohort$x, sim_cohort$id, max))[427]
   # check: print(select(cens_data, c(id, x, limit, conf_weight, fu_weight, cens, fobs____)) %>% filter(id==427), n=50)
@@ -108,27 +111,20 @@ doipw = function(sim_cohort, limits){
   
   
   #4) fit censoring models (can include pre-baseline exposure in practice)
-  #
-  #agekn0 = attr(rcspline.eval(filter(sim_cohort, time==1)$age, nk = 4), "knots")
-  #yearkn0 = attr(rcspline.eval(filter(sim_cohort, time==1)$year, nk = 4), "knots")
-  #agekn = attr(rcspline.eval(filter(sim_cohort, time>1)$age, nk = 4), "knots")
-  #yearkn = attr(rcspline.eval(filter(sim_cohort, time>1)$year, nk = 4), "knots")
   
   # fit models if there is more than a small amount of censoring (seems to work either way, but this avoids convergence problems)
   for (l in limits){
     limidx = which(cens_data$limit == l)
     tempdat = cens_data[limidx,]
     tempdat$mxl = tempdat$cxl / (tempdat$cumatworkl + as.numeric(tempdat$time==1))
-    #agekn0 = attr(rcspline.eval(filter(tempdat, conf_weight==1)$age, nk = 4), "knots")
-    #yearkn0 = attr(rcspline.eval(filter(tempdat, conf_weight==1)$year, nk = 4), "knots")
-    agekn = attr(rcspline.eval(filter(tempdat, fu_weight==1)$age, nk = 6), "knots")
-    yearkn = attr(rcspline.eval(filter(tempdat, fu_weight==1)$year, nk = 6), "knots")
+    agekn0 = attr(rcspline.eval(filter(tempdat, conf_weight==1)$age, nk = 4), "knots")
+    yearkn0 = attr(rcspline.eval(filter(tempdat, conf_weight==1)$year, nk = 4), "knots")
+    agekn = attr(rcspline.eval(filter(tempdat, fu_weight==1)$age, nk = 4), "knots")
+    yearkn = attr(rcspline.eval(filter(tempdat, fu_weight==1)$year, nk = 4), "knots")
     #
     if(sum(tempdat[tempdat$conf_weight==1,"cens"]) > 10){
       summary(confnmod <- glm(cens ~ age + rcspline.eval(age, knots=agekn0) , data = tempdat, weight=conf_weight, family=binomial()))
-      #summary(confnmod <- glm(cens ~ 1 , data = tempdat, weight=conf_weight, family=binomial()))
       summary(confdmod <- glm(cens ~ age + rcspline.eval(age, knots=agekn0) + wagestatus + male + race, data = tempdat, weight=conf_weight, family=binomial()))
-      #summary(confdmod <- glm(cens ~ wagestatus + male + race + male, data = tempdat, weight=conf_weight, family=binomial()))
       # need to use base R operations here
       # only get non-zero predictions if "conf_weight" == 1 (eligible to be "censored" at baseline)
       cens_data[limidx,"nconf"] = tempdat$conf_weight*as.numeric(predict(confnmod, type="response"))
@@ -139,9 +135,7 @@ doipw = function(sim_cohort, limits){
     }
     if(sum(tempdat[tempdat$fu_weight==1,"cens"]) > 1){
       summary(censnmod <- glm(cens ~ age + rcspline.eval(age, knots=agekn), data = tempdat, weight=fu_weight, family=binomial()))
-      #summary(censnmod <- glm(cens ~ 1, data = tempdat, weight=fu_weight, family=binomial()))
       summary(censdmod <- glm(cens ~  mxl + cumatworkl + age + rcspline.eval(age, knots=agekn) + wagestatus + male + race, data = tempdat, weight=fu_weight, family=binomial()))
-      #summary(censdmod <- glm(cens ~  mxl + wagestatus + male + race, data = tempdat, weight=fu_weight, family=binomial()))
       # only get non-zero predictions if "fu_weight" == 1 (eligible to be censored during follow-up)
       cens_data[limidx,"ncens"] = tempdat$fu_weight*as.numeric(predict(censnmod, type="response")) 
       cens_data[limidx,"dcens"] = tempdat$fu_weight*as.numeric(predict(censdmod, type="response")) 
@@ -151,16 +145,15 @@ doipw = function(sim_cohort, limits){
     }
   }
   
+  
   # create final weights
-  cens_data_simple <- cens_data %>% 
+  combined_wtd_data <- cens_data %>% 
     mutate(
       wtcontr = case_when(
-        # weight: (unstabilized) inverse probability of NOT being censored
+        # weight: (stabilized) inverse probability of NOT being censored
         # note regarding unstabilized weights: Cain et al 2010 show that weight stabilization is not guaranteed to reduce variance
         ((fobs____ == 1) & (atwork==1)) ~ (1-cens)*(1-nconf)/(1-dconf),
         ((fobs____ == 0) & (atwork==1)) ~ (1-cens)*(1-ncens)/(1-dcens),
-        #((fobs____ == 1) & (atwork==1)) ~ (1-cens)*(1-0)/(1-dconf),
-        #((fobs____ == 0) & (atwork==1)) ~ (1-cens)*(1-0)/(1-dcens),
         .default=1
       )
     ) %>%
@@ -174,10 +167,9 @@ doipw = function(sim_cohort, limits){
       # weight truncation at 10.0 following Cain et al 2010 (should be a user option)
       ipw_trunc = pmin(ipw, 10.0)
     )
-  # check: summary(select(cens_data_simple, c(ipw, ipw_trunc)))
-  # check: print(select(cens_data_simple, c(id, age, atwork, x, cens, wtcontr, ipw, ipw_trunc)) %>% filter(id==427), n=10)
   
-  
+  # check: summary(select(combined_wtd_data, c(ipw, ipw_trunc)))
+  # check: print(select(combined_wtd_data, c(id, age, atwork, x, cens, wtcontr, ipw, ipw_trunc)) %>% filter(id==427), n=10)
   
   # check mean weights by intervention
   # note mean is taken across all possible observations, even those with weights = 0
@@ -185,82 +177,81 @@ doipw = function(sim_cohort, limits){
   Nid = length(unique(sim_cohort$id))
   wtdx = data.frame(
     limit = limits,
-    mean_cumx = do.call(c,lapply(limits, function(x) mean(cens_data_simple[cens_data_simple$limit == x  & cens_data_simple$cens == 0,]$cumx))),
-    n_conf = do.call(c,lapply(limits, function(x) sum(cens_data_simple[cens_data_simple$limit == x & cens_data_simple$fobs____==1,]$cens))),
-    n_cens = do.call(c,lapply(limits, function(x) sum(cens_data_simple[cens_data_simple$limit == x & cens_data_simple$fobs____==0,]$cens))),
-    n_uncens = do.call(c,lapply(limits, function(x) Nid - sum(cens_data_simple[cens_data_simple$limit == x & cens_data_simple$fobs____==0,]$cens)-sum(cens_data_simple[cens_data_simple$limit == x & cens_data_simple$fobs____==1,]$cens))),
-    wobs_uncens = do.call(c,lapply(limits, function(x) sum((cens_data_simple$ipw[cens_data_simple$limit == x])))),
-    n_d1 = do.call(c,lapply(limits, function(x) sum(cens_data_simple[cens_data_simple$limit == x & cens_data_simple$cens == 0,]$d1))),
-    n_d2 = do.call(c,lapply(limits, function(x) sum(cens_data_simple[cens_data_simple$limit == x & cens_data_simple$cens == 0,]$d2))),
-    n_d1w = do.call(c,lapply(limits, function(x) sum(cens_data_simple[cens_data_simple$limit == x & cens_data_simple$cens == 0,]$ipw*cens_data_simple[cens_data_simple$limit == x & cens_data_simple$cens == 0,]$d1))),
-    n_d2w = do.call(c,lapply(limits, function(x) sum(cens_data_simple[cens_data_simple$limit == x & cens_data_simple$cens == 0,]$ipw*cens_data_simple[cens_data_simple$limit == x & cens_data_simple$cens == 0,]$d2))),
-    wmean_age = do.call(c,lapply(limits, function(x) sum(cens_data_simple[cens_data_simple$limit == x & cens_data_simple$cens == 0,]$ipw*cens_data_simple[cens_data_simple$limit == x & cens_data_simple$cens == 0,]$age)/sum(cens_data_simple[cens_data_simple$limit == x & cens_data_simple$cens == 0,]$ipw))),
-    mean_ipw = do.call(c,lapply(limits, function(x) mean(cens_data_simple[cens_data_simple$limit == x & cens_data_simple$cens == 0,]$ipw))),
-    mean_ipwt = do.call(c,lapply(limits, function(x) mean(cens_data_simple[cens_data_simple$limit == x & cens_data_simple$cens == 0,]$ipw_trunc)))
+    mean_cumx = do.call(c,lapply(limits, function(x) mean(combined_wtd_data[combined_wtd_data$limit == x  & combined_wtd_data$cens == 0,]$cumx))),
+    n_conf = do.call(c,lapply(limits, function(x) sum(combined_wtd_data[combined_wtd_data$limit == x & combined_wtd_data$fobs____==1,]$cens))),
+    n_cens = do.call(c,lapply(limits, function(x) sum(combined_wtd_data[combined_wtd_data$limit == x & combined_wtd_data$fobs____==0,]$cens))),
+    n_d1w = do.call(c,lapply(limits, function(x) sum(combined_wtd_data[combined_wtd_data$limit == x & combined_wtd_data$cens == 0,]$ipw*combined_wtd_data[combined_wtd_data$limit == x & combined_wtd_data$cens == 0,]$d1))),
+    n_d2w = do.call(c,lapply(limits, function(x) sum(combined_wtd_data[combined_wtd_data$limit == x & combined_wtd_data$cens == 0,]$ipw*combined_wtd_data[combined_wtd_data$limit == x & combined_wtd_data$cens == 0,]$d2))),
+    mean_ipw = do.call(c,lapply(limits, function(x) mean(combined_wtd_data[combined_wtd_data$limit == x & combined_wtd_data$cens == 0,]$ipw)))
   )
-  wtdx$rt_d1w = with(wtdx, n_d1w/wobs_uncens)
-  wtdx$rt_d2w = with(wtdx, n_d2w/wobs_uncens)
-  wtdx
-  sim_cohort$event <- factor(sim_cohort$d2 + sim_cohort$d1*2, 0:2, labels=c("censor", "d_other", "d_lc"))
-  sim_cohort$intercept <- 1
-  cens_data_simple$event <- factor(cens_data_simple$d2 + cens_data_simple$d1*2, 0:2, labels=c("censor", "d_other", "d_lc"))
-
+  
+  combined_wtd_data$event <- factor(combined_wtd_data$d2 + combined_wtd_data$d1*2, 0:2, labels=c("censor", "d_other", "d_lc"))
+  
   # marginal structural policy Cox model: effect of incremental change in the limit
-  (nc = coxph(Surv(agein, age, event)~intercept, data=sim_cohort, id=id)) # trick to get survival curve from cohort
-  (tt = coxph(Surv(agein, age, event)~limit, data=filter(cens_data_simple, ipw>0), id=cloneid, weight=ipw)) # original variance (invalid) need bootstrap to get correct SEs
-  (ttr = coxph(Surv(agein, age, event)~limit, data=filter(cens_data_simple, ipw>0), id=cloneid, weight=ipw, cluster=id)) # Robust variance (valid in large samples, slower than non-robust estimate)
-  list(nc=nc, msm=tt, msmr=ttr, dx=wtdx)
+  # robust variance is done by ID level, but observations are done by CLONEID level
+  ##########################################################################################
+  # NOTE that the linear ln-HR may not be appropriate here we may chose to model with a spline: rcs(limit)
+  # this should be a user option
+  ##########################################################################################
+  ttr1 = coxph(Surv(agein, age, d1)~limit, data=filter(combined_wtd_data, ipw>0), 
+               id=cloneid, weight=ipw, cluster=id, x=FALSE, y=FALSE)
+  ttr2 = coxph(Surv(agein, age, d2)~limit, data=filter(combined_wtd_data, ipw>0), 
+               id=cloneid, weight=ipw, cluster=id, x=FALSE, y=FALSE)
+  # multi-state model: here this just fits both cox models at once: the output is a little different, and it's only needed for risk difference calculation
+  # we could likely just include this and pull out individual level model estimates out of it, which gives some flexibility
+  ttrms = coxph(Surv(agein, age, event)~limit, data=filter(combined_wtd_data, ipw>0), 
+               id=cloneid, weight=ipw, cluster=id, x=FALSE, y=FALSE)
+  # Output: two marginal structural models (one for each outcome) and some basic diagnostics
+  list(msmr1=ttr1, msmr2=ttr2, msmms=ttrms, dx=wtdx)
 }
 
 
-# traditional estimates:
 
-yearkn = attr(rcspline.eval(sim_cohort$year, nk = 4), "knots")
-#suppressWarnings(std_hr1 <- coxph(Surv(agein, age, d1)~cxl + year+rcspline.eval(year, knots=yearkn) + male + race + wagestatus + male:year + male:age, data=sim_cohort))
-#suppressWarnings(std_hr2 <- coxph(Surv(agein, age, d2)~cxl + year+rcspline.eval(year, knots=yearkn) + male + race + wagestatus + male:year + male:age, data=sim_cohort))
-# this model is not needed: just showing that the multi-state model is equivalent to two Cox models
-sim_cohort$event <- factor(sim_cohort$d2 + sim_cohort$d1*2, 0:2, labels=c("censor", "d_other", "d_lc"))
-#suppressWarnings(std_hr <- coxph(Surv(agein, age, event)~cxl + year+rcspline.eval(year, knots=yearkn) + male + race + wagestatus + male:year + male:age, data=sim_cohort, id=id))
-suppressWarnings(std_hr <- coxph(Surv(agein, age, event)~cxl + male + race + wagestatus, data=sim_cohort, id=id))
-summary(std_hr)
-# if exposure is harmful, then coefficient should be positive (can be biased from HWSB)
-
-# IPW estimates, addressing bias from HWSB
+# 4) fit the MSM
+# Note: this is a big model: on my computer I have to increase the "vector memory limit" for the robust variance estimator
 mem.maxVSize(vsize = 32768)
-point_estimates = doipw(sim_cohort, limits)
+msm_estimates = doipw(sim_cohort, limits)
 # check diagnostics
-point_estimates$dx
+msm_estimates$dx
 
 # ln-HR: effect of one unit change in the exposure limit (Marginal structural policy model)
-ttr = point_estimates$msmr
+ttr = msm_estimates$msmr1
 summary(ttr)
 
-# survival curve at specified limits based on predicting from MSM
-# NOTE that the linear ln-HR may not be appropriate here and a model with a spline
-# on the "limit" variable may be warranted
-cc_nc = survfit(point_estimates$nc, newdata = data.frame(intercept=1))  # can alternatively get predictions for a very high limit that approximates the natural course
-ccr = survfit(point_estimates$msmr, newdata = data.frame(limit=3.0))
+# 5)  survival curve at specified limits based on predicting from MSM (this is more efficient than the Aalen-Johansen estimator in the other analysis at a single intervention)
 
-commontimes = intersect(cc_nc$time, ccr$time)
-ccncindex = which(cc_nc$time %in% commontimes)
-ccindex = which(ccr$time %in% commontimes)
+#  5a) Use Aalen-Johansen estimator to get risk for each outcome at the "natural course"
+# note that this could require IPCW for censoring due to loss to follow-up, but these data do not have that issue
 
-# risk difference, natural course vs. limit of 0.1
-(rddf = data.frame(
-  age=ccr$time[ccncindex], 
-  risklc_nc=cc_nc$pstate[,,3][ccindex], 
-  risklc_int = ccr$pstate[,,3][ccindex]
-  ))
-rddf$rdlc = with(rddf, risklc_int-risklc_nc)
+sim_cohort$event <- factor(sim_cohort$d2 + sim_cohort$d1*2, 0:2, labels=c("censor", "d_other", "d_lc"))
+tt0 = survfit(Surv(agein, age, event)~1, data=sim_cohort, id=id)
 
+riskdf0 = data.frame(tt0$time, tt0$pstate)
+names(riskdf0) = c("age0", "surv0", "risk_other0", "risk_lc0")
+tail(riskdf0)
 
-# risk difference at age 90 (older ages may be of interest or too sparse)
-tail(filter(rddf, age<=90))
+#5b) Risk from the MSM (an MS Cox model, or MS multistate model to account for competing risks)
+# risk at limit of 2.0
+
+ccr = survfit(msm_estimates$msmms, newdata = data.frame(limit=2.0))
+(riskdf1 = data.frame(
+  age=ccr$time, 
+  survint = ccr$pstate[,,1],
+  risk_otherint = ccr$pstate[,,2],
+  risk_lcint = ccr$pstate[,,3]
+))
+tail(riskdf1)
+
+# risk difference across age range (may need to match the two datasets on age first)
+rdlc = riskdf1$risk_lcint-riskdf0$risk_lc0
+rddf = cbind((riskdf0), (riskdf1), risk_difference_lc = (rdlc))
+tail(rddf)
+
 
 
 # risk curves for lung cancer (intervention in red)
-plot(rddf$age, rddf$risklc_nc, type="s", ylab="risk", xlab="age", xlim=c(16,90))
-lines(rddf$age, rddf$risklc_int, col=2, type="s")
+plot(rddf$age, rddf$risk_lc0, type="s", ylab="risk", xlab="age", xlim=c(16,90))
+lines(rddf$age, rddf$risk_lcint, col=2, type="s")
 
 # plotting risk difference over time
-plot(rddf$age, rddf$rdlc, ylab="risk difference", xlab="age", type="s", xlim=c(16,90))
+plot(rddf$age, rddf$risk_difference_lc, ylab="risk difference", xlab="age", type="s", xlim=c(16,90))
