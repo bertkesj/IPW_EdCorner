@@ -87,7 +87,7 @@ doipw = function(sim_cohort, limits){
     filter(
       drop < 2
     )
-
+  
   # 3) create 1/0 weights to use for confounding/censoring during follow-up (alternative is to create new datasets)
   cens_data <- group_by(cens_data, cloneid) %>%
     mutate(
@@ -200,7 +200,7 @@ doipw = function(sim_cohort, limits){
   # multi-state model: here this just fits both cox models at once: the output is a little different, and it's only needed for risk difference calculation
   # we could likely just include this and pull out individual level model estimates out of it, which gives some flexibility
   ttrms = coxph(Surv(agein, age, event)~limit, data=filter(combined_wtd_data, ipw>0), 
-               id=cloneid, weight=ipw, cluster=id, x=FALSE, y=FALSE)
+                id=cloneid, weight=ipw, cluster=id, x=FALSE, y=FALSE)
   # Output: two marginal structural models (one for each outcome) and some basic diagnostics
   list(msmr1=ttr1, msmr2=ttr2, msmms=ttrms, dx=wtdx)
 }
@@ -223,18 +223,8 @@ summary(ttr)
 #  5a) Use Aalen-Johansen estimator to get risk for each outcome at the "natural course"
 # note that this could require IPCW for censoring due to loss to follow-up, but these data do not have that issue
 
-<<<<<<< HEAD
-# risk difference, natural course vs. limit of 0.1
-rddf = data.frame(
-  age=ccr$time[ccncindex], 
-  risklc_nc=cc_nc$pstate[,,3][ccindex], 
-  risklc_int = ccr$pstate[,,3][ccindex]
-  ))
-rddf$rdlc = with(rddf, risklc_int-risklc_nc)
-=======
 sim_cohort$event <- factor(sim_cohort$d2 + sim_cohort$d1*2, 0:2, labels=c("censor", "d_other", "d_lc"))
 tt0 = survfit(Surv(agein, age, event)~1, data=sim_cohort, id=id)
->>>>>>> 32d66f44fd5d1ea097a22f01ed708e972d1207f5
 
 riskdf0 = data.frame(tt0$time, tt0$pstate)
 names(riskdf0) = c("age0", "surv0", "risk_other0", "risk_lc0")

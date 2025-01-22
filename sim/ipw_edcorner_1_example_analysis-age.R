@@ -116,7 +116,7 @@ if(sum(cens_data[cens_data$fu_weight==1,"cens"]) > 10){
                   family=binomial())
   # numerator for stabilizing weight
   censnmod <- glm(cens ~ age + rcspline.eval(age, knots=agekn), data = cens_data, weight=fu_weight, family=binomial())
-  } 
+} 
 
 # 5) create weights
 # 5a) "censored at baseline" model 
@@ -160,7 +160,7 @@ cens_data <- cens_data %>%
   ) %>%
   ungroup()
 
-  
+
 #6) estimate risk under an exposure limit
 
 #  6a) Use Aalen-Johansen estimator to get risk for each outcome at limit
@@ -212,4 +212,3 @@ riskdf1[riskdf1$age==90, "risk_lc"] - riskdf0[riskdf0$age==90, "risk_lc0"]
 # 2. Carry out clone-censor-weight + estimate effects on the sample from #1
 # 3. Repeat 1 and 2 200+ times, recording effect estimate for each sample
 # 4. Bootstrap standard error is the standard deviation of the effect estimates across the 200+ bootstrap samples
-
