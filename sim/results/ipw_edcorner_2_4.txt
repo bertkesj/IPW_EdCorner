@@ -1,0 +1,22 @@
+Call:
+coxph(formula = Surv(agein, age, d1) ~ limit, data = filter(combined_wtd_data, 
+    ipw > 0), weights = ipw, x = FALSE, y = FALSE, id = cloneid, 
+    cluster = id)
+
+  n= 10454503, number of events= 10562 
+
+         coef exp(coef) se(coef) robust se     z Pr(>|z|)    
+limit 0.43210   1.54049  0.02259   0.05796 7.455 8.96e-14 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+      exp(coef) exp(-coef) lower .95 upper .95
+limit      1.54     0.6491     1.375     1.726
+
+Concordance= 0.549  (se = 0.007 )
+Likelihood ratio test= 364  on 1 df,   p=<2e-16
+Wald test            = 55.58  on 1 df,   p=9e-14
+Score (logrank) test = 367.4  on 1 df,   p=<2e-16,   Robust = 67.05  p=3e-16
+
+  (Note: the likelihood ratio and score tests assume independence of
+     observations within a cluster, the Wald and robust score tests do not).

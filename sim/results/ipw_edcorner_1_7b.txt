@@ -1,0 +1,8 @@
+> # 7b) Risk difference at a few illustrative ages from weighted Aalen-Johansen estimator
+> # Note: this will be negative if the exposure is harmful
+> # risk difference at age 80 
+> riskdf1[riskdf1$age==80, "risk_lc"] - riskdf0[riskdf0$age==80, "risk_lc0"]
+[1] -0.02744923
+> # risk difference at age 90
+> riskdf1[riskdf1$age==90, "risk_lc"] - riskdf0[riskdf0$age==90, "risk_lc0"]
+[1] -0.03037307

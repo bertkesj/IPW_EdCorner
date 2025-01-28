@@ -127,4 +127,3 @@ dat %>%
             Pwunadj = sum(IPWunadj)) %>%
   View()
 
-

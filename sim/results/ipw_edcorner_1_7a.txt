@@ -1,0 +1,21 @@
+Call:
+coxph(formula = Surv(agein, age, d1) ~ exposed, data = filter(combined_data, 
+    ipw != 0), weights = ipw, id = cloneid, cluster = id)
+
+  n= 754786, number of events= 936 
+
+            coef exp(coef) se(coef) robust se      z Pr(>|z|)    
+exposed -0.43840   0.64507  0.07134   0.08847 -4.955 7.23e-07 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+        exp(coef) exp(-coef) lower .95 upper .95
+exposed    0.6451       1.55    0.5424    0.7672
+
+Concordance= 0.546  (se = 0.009 )
+Likelihood ratio test= 40.15  on 1 df,   p=2e-10
+Wald test            = 24.55  on 1 df,   p=7e-07
+Score (logrank) test = 38.37  on 1 df,   p=6e-10,   Robust = 34.44  p=4e-09
+
+  (Note: the likelihood ratio and score tests assume independence of
+     observations within a cluster, the Wald and robust score tests do not).
