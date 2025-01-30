@@ -17,6 +17,7 @@ sim_cohort <- sim_cohort %>%
   ) %>%
   select(-one) %>%
   ungroup()
+
 sim_cohort <- sim_cohort %>%
   group_by(id) %>%
   mutate(
@@ -24,3 +25,8 @@ sim_cohort <- sim_cohort %>%
   ) %>%
   ungroup()
 
+# Define outcome
+sim_cohort <- sim_cohort %>%
+  mutate(event = factor(d2 + d1*2, 
+                        0:2, 
+                        labels=c("censor", "d_other", "d_lc")))

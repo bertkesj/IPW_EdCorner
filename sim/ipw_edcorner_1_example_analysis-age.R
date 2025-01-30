@@ -8,25 +8,37 @@ load("data/sim_cohort.RData")
 # Read in data
 source('sim/1-data_process.R')
 
-# Set limits
-limits <- c(2)
-
 # Create Clones
 source('sim/2-create_clones.R')
+combined_wtd_data <- clones(data = sim_cohort,
+                             limit_var = x,
+                             limits = c(Inf, 2),
+                             baseline_formula = ~ age + rcspline.eval(age, nk=4) + 
+                               wagestatus + male + race,
+                             fu_formula = ~ age + rcspline.eval(age, nk=4) + 
+                               mxl + cumatworkl + 
+                               wagestatus + male + race,
+                            pass_thru_vars=vars(event,wtcontr,cumx,atwork,cens,wagestatus, male, race))
 
 #6) estimate risk under an exposure limit
 #  6a) Use Aalen-Johansen estimator to get risk for each outcome at limit
-tt = survfit(Surv(agein, age, event)~1, data=combined_wtd_data, id=cloneid, weight=ipw)
+tt = survfit(Surv(agein, age, event) ~ 1, 
+             data=filter(combined_wtd_data,
+                         limit == 2),
+             id=cloneid, 
+             weight=ipw)
 
 riskdf1 = data.frame(tt$time, tt$pstate)
 names(riskdf1) = c("age", "surv", "risk_other", "risk_lc")
 tail(riskdf1)
 
 #  6a) Use Aalen-Johansen estimator to get risk for each outcome at the "natural course"
-# note that this could require IPCW for censoring due to loss to follow-up, but these data do not have that issue
-
-sim_cohort$event <- factor(sim_cohort$d2 + sim_cohort$d1*2, 0:2, labels=c("censor", "d_other", "d_lc"))
-tt0 = survfit(Surv(agein, age, event)~1, data=sim_cohort, id=id)
+#      note that this could require IPCW for censoring due to loss to follow-up, 
+#      but these data do not have that issue
+tt0 = survfit(Surv(agein, age, event) ~ 1, 
+              data=filter(combined_wtd_data,
+                          limit == Inf),
+              id=id)
 
 riskdf0 = data.frame(tt0$time, tt0$pstate)
 names(riskdf0) = c("age0", "surv0", "risk_other0", "risk_lc0")
@@ -34,21 +46,19 @@ tail(riskdf0)
 
 # 7) estimate effect of introducing an exposure limit (impact of hypothetical intervention vs. doing nothing)
 # 7a) Hazard ratio from weighted Cox model (note use of robust variance)
-sim_cohort$exposed = 0
-combined_wtd_data$exposed = 1
-sim_cohort$ipw = 1
-sim_cohort$cloneid = paste0("cloneobs_", sim_cohort$id)
-combined_data <- bind_rows(sim_cohort, combined_wtd_data)
-
-coxph(Surv(agein, age, d1)~exposed, 
-      data=filter(combined_data, ipw != 0), weight=ipw, 
-      id=cloneid, cluster=id) %>% 
+coxph(Surv(agein, age, event == 'd_lc') ~ factor(limit,
+                                                 c(Inf, 2)), 
+      data=filter(combined_wtd_data, ipw != 0), 
+      weight=ipw, 
+      id=cloneid, 
+      cluster=id) %>% 
   summary %>% print
 
 
 # 7b) Risk difference at a few illustrative ages from weighted Aalen-Johansen estimator
 #     Note: this will be negative if the exposure is harmful
-#           risk difference at age 80 
+
+# risk difference at age 80 
 riskdf1[riskdf1$age==80, "risk_lc"] - riskdf0[riskdf0$age==80, "risk_lc0"]
 # risk difference at age 90
 riskdf1[riskdf1$age==90, "risk_lc"] - riskdf0[riskdf0$age==90, "risk_lc0"]
