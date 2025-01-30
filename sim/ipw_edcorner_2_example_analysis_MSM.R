@@ -8,7 +8,8 @@ load("data/sim_cohort.RData")
 source('sim/1-data_process.R')
 
 #1b) define reasonable limits
-sourc('sim/1b-check_define_reasonable_limits')
+source('sim/1b-check_define_reasonable_limits.R')
+limits
 
 # do all analysis: note this is wrapped in a function to facilitate bootstrapping
 doipw = function(sim_cohort, limits){
