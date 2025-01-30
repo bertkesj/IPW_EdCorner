@@ -12,6 +12,8 @@ sim_cohort <- sim_cohort %>%
     atworkl = lag(atwork, default=0),  
     leftwork = as.numeric(atworkl==1 & atwork == 0),
     cxl2 = lag(cxl, default=0),  
+    
+    mxl = cxl / (cumatworkl + as.numeric(time==1))
   ) %>%
   select(-one) %>%
   ungroup()
@@ -21,3 +23,4 @@ sim_cohort <- sim_cohort %>%
     male = as.numeric(gender == 'M')
   ) %>%
   ungroup()
+

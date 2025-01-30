@@ -1,5 +1,12 @@
+# To do:
+# inputs: data, variable and limits, function/variables for censoring
+# output: cloned data and IPW weights
+
+
+
 #1) clone the data for an intervention of an annual limit at 2
 # create a "clone id" that is distinct to each clone
+#1b) create copy of the dataset for each limit
 clones <- do.call(rbind,
                   lapply(1:length(limits), function(x) {  
                     df = sim_cohort                  
@@ -8,8 +15,6 @@ clones <- do.call(rbind,
                     df                    
                   }
                   ))
-
-
 #2) artificially censor data (keeping first observation that is censored)
 cens_data <- clones %>%
   group_by(cloneid) %>%
@@ -17,13 +22,13 @@ cens_data <- clones %>%
     cens = pmin(1,cumsum(x > limit)),
     drop = pmin(2, cumsum(cens))
   ) %>%
-  ungroup() %>%
+  group_by() %>%
   filter(
     drop < 2
   )
 
-# 3) create 1/0 weights to use for confounding/censoring during follow-up (alternative is to create new datasets with some observations dropped)
-#  note: these are not the inverse probability of censoring weights that will be used later
+# 3) create 1/0 weights to use for confounding/censoring during follow-up 
+#    (alternative is to create new datasets)
 cens_data <- group_by(cens_data, cloneid) %>%
   mutate(
     one = 1,
@@ -31,7 +36,7 @@ cens_data <- group_by(cens_data, cloneid) %>%
     fobs____ = as.numeric(nobs == 1)
   ) %>%
   mutate(
-    conf_weight = as.numeric(nobs  == 1), # all of these are at work
+    conf_weight = as.numeric(nobs  == 1), # this duplicates fobs____ but is kept for clarity
     fu_weight = as.numeric((nobs  > 1) & (atwork == 1)),    
     dconf = 0,
     dcens = 0,
@@ -40,42 +45,43 @@ cens_data <- group_by(cens_data, cloneid) %>%
   select(-c(one, nobs)) %>%
   ungroup()
 
-
-#4) fit censoring models (can include pre-baseline exposure in practice)
-# use flexible functions of age and time based on restricted cubic splines
-agekn0 = attr(rcspline.eval(filter(cens_data, time==1 & atwork == 1)$age, nk = 4), "knots")
-yearkn0 = attr(rcspline.eval(filter(cens_data, time==1 & atwork == 1)$year, nk = 4), "knots")
-agekn = attr(rcspline.eval(filter(cens_data, time>1 & atwork == 1)$age, nk = 4), "knots")
-yearkn = attr(rcspline.eval(filter(cens_data, time>1 & atwork == 1)$year, nk = 4), "knots")
-cxkn = attr(rcspline.eval(filter(cens_data, time>1 & atwork == 1)$cxl, nk = 4), "knots")
-clkn = attr(rcspline.eval(filter(cens_data, time>1 & atwork == 1)$cumatworkl, nk = 4), "knots")
-cens_data$mxl = cens_data$cxl / (cens_data$cumatworkl + as.numeric(cens_data$time==1))
-
-# only fit models if there is more than a small amount of censoring (seems to work either way, but this avoids convergence problems)
-# 4a) "censored at baseline" model 
+# Censoring models 
 for (l in limits){
+  
+  ### Baseline model. Check if there is sufficient (> 10) amount of censoring
+  
+  #filter data by censor limits scenario (limidx)
   limidx = which(cens_data$limit == l)
   tempdat = cens_data[limidx,]
-  tempdat$mxl = tempdat$cxl / (tempdat$cumatworkl + as.numeric(tempdat$time==1))
-  agekn0 = attr(rcspline.eval(filter(tempdat, conf_weight==1)$age, nk = 4), "knots")
-  yearkn0 = attr(rcspline.eval(filter(tempdat, conf_weight==1)$year, nk = 4), "knots")
-  agekn = attr(rcspline.eval(filter(tempdat, fu_weight==1)$age, nk = 4), "knots")
-  yearkn = attr(rcspline.eval(filter(tempdat, fu_weight==1)$year, nk = 4), "knots")
-  #
+  
   if(sum(tempdat[tempdat$conf_weight==1,"cens"]) > 10){
-    summary(confnmod <- glm(cens ~ age + rcspline.eval(age, knots=agekn0) , data = tempdat, weight=conf_weight, family=binomial()))
-    summary(confdmod <- glm(cens ~ age + rcspline.eval(age, knots=agekn0) + wagestatus + male + race, data = tempdat, weight=conf_weight, family=binomial()))
-    # need to use base R operations here
-    # only get non-zero predictions if "conf_weight" == 1 (eligible to be "censored" at baseline)
+    confnmod <- glm(cens ~ age + rcspline.eval(age, nk=4) , 
+                    data = tempdat, 
+                    weight=conf_weight, 
+                    family=binomial())
+    confdmod <- glm(cens ~ age + rcspline.eval(age, nk=4) + wagestatus + male + race, 
+                    data = tempdat, 
+                    weight=conf_weight, 
+                    family=binomial())
     cens_data[limidx,"nconf"] = tempdat$conf_weight*as.numeric(predict(confnmod, type="response"))
     cens_data[limidx,"dconf"] = tempdat$conf_weight*as.numeric(predict(confdmod, type="response"))
   } else{
     cens_data[limidx,"nconf"] = 0
     cens_data[limidx,"dconf"] = 0
   }
+  
+  ## Follow-up model
   if(sum(tempdat[tempdat$fu_weight==1,"cens"]) > 1){
-    summary(censnmod <- glm(cens ~ age + rcspline.eval(age, knots=agekn), data = tempdat, weight=fu_weight, family=binomial()))
-    summary(censdmod <- glm(cens ~  mxl + cumatworkl + age + rcspline.eval(age, knots=agekn) + wagestatus + male + race, data = tempdat, weight=fu_weight, family=binomial()))
+    censnmod <- glm(cens ~ age + rcspline.eval(age, nk=4), 
+                    data = tempdat, 
+                    weight=fu_weight, 
+                    family=binomial())
+    censdmod <- glm(cens ~ age + rcspline.eval(age, nk=4) + 
+                      mxl + cumatworkl + 
+                      wagestatus + male + race, 
+                    data = tempdat, 
+                    weight=fu_weight, 
+                    family=binomial())
     # only get non-zero predictions if "fu_weight" == 1 (eligible to be censored during follow-up)
     cens_data[limidx,"ncens"] = tempdat$fu_weight*as.numeric(predict(censnmod, type="response")) 
     cens_data[limidx,"dcens"] = tempdat$fu_weight*as.numeric(predict(censdmod, type="response")) 
@@ -85,13 +91,13 @@ for (l in limits){
   }
 }
 
-
 # create final weights
 combined_wtd_data <- cens_data %>% 
   mutate(
     wtcontr = case_when(
       # weight: (stabilized) inverse probability of NOT being censored
-      # note regarding unstabilized weights: Cain et al 2010 show that weight stabilization is not guaranteed to reduce variance
+      # note regarding unstabilized weights: Cain et al 2010 show that weight 
+      # stabilization is not guaranteed to reduce variance
       ((fobs____ == 1) & (atwork==1)) ~ (1-cens)*(1-nconf)/(1-dconf),
       ((fobs____ == 0) & (atwork==1)) ~ (1-cens)*(1-ncens)/(1-dcens),
       .default=1
@@ -107,9 +113,6 @@ combined_wtd_data <- cens_data %>%
     # weight truncation at 10.0 following Cain et al 2010 (should be a user option)
     ipw_trunc = pmin(ipw, 10.0)
   )
-
-# check: summary(select(combined_wtd_data, c(ipw, ipw_trunc)))
-# check: print(select(combined_wtd_data, c(id, age, atwork, x, cens, wtcontr, ipw, ipw_trunc)) %>% filter(id==427), n=10)
 
 # check mean weights by intervention
 # note mean is taken across all possible observations, even those with weights = 0

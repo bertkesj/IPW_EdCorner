@@ -5,27 +5,18 @@ library(Hmisc)
 library(survival)
 load("data/sim_cohort.RData")
 
-
-
-# data process
+# Read in data
 source('sim/1-data_process.R')
 
-# checking exposure at work
-quantile(filter(sim_cohort, atwork==1)$x, 0:20/20)
-
-#1-0) set limit (limits) to generalize to a list of limits
+# Set limits
 limits <- c(2)
 
 # Create Clones
 source('sim/2-create_clones.R')
 
-#STEVE edit: rename 
-cens_data <- combined_wtd_data
-
 #6) estimate risk under an exposure limit
-
 #  6a) Use Aalen-Johansen estimator to get risk for each outcome at limit
-tt = survfit(Surv(agein, age, event)~1, data=cens_data, id=cloneid, weight=ipw)
+tt = survfit(Surv(agein, age, event)~1, data=combined_wtd_data, id=cloneid, weight=ipw)
 
 riskdf1 = data.frame(tt$time, tt$pstate)
 names(riskdf1) = c("age", "surv", "risk_other", "risk_lc")
@@ -41,13 +32,13 @@ riskdf0 = data.frame(tt0$time, tt0$pstate)
 names(riskdf0) = c("age0", "surv0", "risk_other0", "risk_lc0")
 tail(riskdf0)
 
-#7) estimate effect of introducing an exposure limit (impact of hypothetical intervention vs. doing nothing)
+# 7) estimate effect of introducing an exposure limit (impact of hypothetical intervention vs. doing nothing)
 # 7a) Hazard ratio from weighted Cox model (note use of robust variance)
 sim_cohort$exposed = 0
-cens_data$exposed = 1
+combined_wtd_data$exposed = 1
 sim_cohort$ipw = 1
 sim_cohort$cloneid = paste0("cloneobs_", sim_cohort$id)
-combined_data <- bind_rows(sim_cohort, cens_data)
+combined_data <- bind_rows(sim_cohort, combined_wtd_data)
 
 coxph(Surv(agein, age, d1)~exposed, 
       data=filter(combined_data, ipw != 0), weight=ipw, 
@@ -56,8 +47,8 @@ coxph(Surv(agein, age, d1)~exposed,
 
 
 # 7b) Risk difference at a few illustrative ages from weighted Aalen-Johansen estimator
-# Note: this will be negative if the exposure is harmful
-# risk difference at age 80 
+#     Note: this will be negative if the exposure is harmful
+#           risk difference at age 80 
 riskdf1[riskdf1$age==80, "risk_lc"] - riskdf0[riskdf0$age==80, "risk_lc0"]
 # risk difference at age 90
 riskdf1[riskdf1$age==90, "risk_lc"] - riskdf0[riskdf0$age==90, "risk_lc0"]
