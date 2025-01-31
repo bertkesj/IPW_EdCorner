@@ -91,12 +91,12 @@ tail(riskdf0)
 #5b) Risk from the MSM (an MS Cox model, or MS multistate model to account for competing risks)
 # risk at limit of 2.0
 ccr = survfit(msm_estimates$msmms, newdata = data.frame(limit=2.0))
-(riskdf1 = data.frame(
+riskdf1 = data.frame(
   age=ccr$time, 
   survint = ccr$pstate[,,1],
   risk_otherint = ccr$pstate[,,2],
   risk_lcint = ccr$pstate[,,3]
-))
+)
 tail(riskdf1)
 
 # risk difference across age range (may need to match the two datasets on age first)

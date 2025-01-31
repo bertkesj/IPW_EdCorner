@@ -1,4 +1,10 @@
-
+# input: person-year data
+#        limit variable and limits to define censoring scenarios
+#           I include Inf as a limit which outputs original data
+#        one sided baseline and follow-up formulas to use when modeling censoring with a glm
+#        pass through variables to include in output data
+#        truncation value for final IPWs
+# output: single data frame which includes all cloned data with calculated IPWs
 clones <- function(data,
                    limit_var,
                    limits,
