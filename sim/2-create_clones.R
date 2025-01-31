@@ -117,7 +117,9 @@ clones <- function(data,
         .default=1
       )
     ) %>%
-    select(id,cloneid,agein,age,!!limit_var,!!!pass_thru_vars,limit, fobs____) %>% # optional step here to reduce comp. burden
+    select(id,cloneid,agein,age,
+           !!limit_var,!!!pass_thru_vars,
+           wtcontr,limit, fobs____) %>% # optional step here to reduce comp. burden
     group_by(cloneid) %>%
     mutate(
       ipw = cumprod(wtcontr)
