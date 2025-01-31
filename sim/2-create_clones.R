@@ -5,6 +5,7 @@
 #        pass through variables to include in output data
 #        truncation value for final IPWs
 # output: single data frame which includes all cloned data with calculated IPWs
+
 clones <- function(data,
                    limit_var,
                    limits,
@@ -69,7 +70,8 @@ clones <- function(data,
                       weight=conf_weight, 
                       family=binomial())
       confdmod <- glm(paste('cens', 
-                            as.character(baseline_formula)) %>%
+                            paste(as.character(baseline_formula),
+                                  collapse = ' ')) %>%
                         formula(), 
                       data = tempdat, 
                       weight=conf_weight, 
@@ -88,7 +90,8 @@ clones <- function(data,
                       weight=fu_weight, 
                       family=binomial())
       censdmod <- glm(paste('cens', 
-                            as.character(fu_formula)) %>%
+                            paste(as.character(fu_formula),
+                                  collapse = ' ')) %>%
                         formula(), 
                       data = tempdat, 
                       weight=fu_weight, 
